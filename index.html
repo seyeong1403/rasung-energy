@@ -486,18 +486,44 @@
     const dots=[...document.querySelectorAll('.hero-dot')];
     const vids=[...document.querySelectorAll('.hero-vid')];
     if(slides.length<2) return;
-    const AUTO=4500; let i=0, timer=null, pauseT=null;
+    const AUTO=4500; let i=0, timer=null, pauseT=null, token=0;
+
+    // 다음에 재생할 영상을 미리 버퍼링 (초기 로딩은 hero1만 auto → 성능 유지)
+    function prime(v){
+      if(!v) return;
+      if(v.getAttribute('preload')!=='auto'){
+        v.setAttribute('preload','auto');
+        if(v.readyState===0){ try{ v.load(); }catch(e){} }
+      }
+    }
+    // 새 영상이 준비된 뒤에만 크로스페이드 → 전환 순간 검은 화면 방지
+    function reveal(v,myToken){
+      if(myToken!==token) return;
+      v.classList.add('show');
+      vids.forEach(o=>{ if(o!==v) o.classList.remove('show'); });
+      clearTimeout(pauseT);
+      pauseT=setTimeout(()=>vids.forEach(o=>{ if(o!==v){ try{o.pause();}catch(e){} } }), 1500); // 크로스페이드 후 이전 영상 정지(동시 디코딩 최소화)
+    }
+
     function go(n){
       i=(n+slides.length)%slides.length;
+      const myToken=++token;                     // 빠른 연속 전환 시 이전 대기 취소
       slides.forEach((s,k)=>s.classList.toggle('is-active',k===i));
       dots.forEach((d,k)=>d.classList.toggle('is-on',k===i));
-      // 배경 영상도 같은 인덱스로 크로스페이드
-      vids.forEach((v,k)=>{
-        if(k===i){ v.classList.add('show'); try{v.currentTime=0;}catch(e){} v.play().catch(()=>{}); }
-        else { v.classList.remove('show'); }
-      });
-      clearTimeout(pauseT);
-      pauseT=setTimeout(()=>vids.forEach((v,k)=>{ if(k!==i){ try{v.pause();}catch(e){} } }), 1500); // 크로스페이드 후 이전 영상 정지(동시 디코딩 최소화)
+
+      const cur=vids[i];
+      if(!cur) return;
+      prime(cur);
+      prime(vids[(i+1)%vids.length]);            // 다음 영상 선행 버퍼링
+
+      const start=()=>{
+        if(myToken!==token) return;
+        try{ if(cur.readyState>=1) cur.currentTime=0; }catch(e){}
+        cur.play().catch(()=>{});
+        reveal(cur,myToken);
+      };
+      if(cur.readyState>=2) start();             // 이미 준비됨 → 즉시 전환
+      else cur.addEventListener('loadeddata',start,{once:true});  // 준비될 때까지 이전 영상 유지
     }
     function restart(){ clearInterval(timer); timer=setInterval(()=>go(i+1),AUTO); }
     function jump(n){ go(n); restart(); }
