@@ -49,8 +49,9 @@ $RemoteDir = '/' + $RemoteDir.Trim('/')
 $skipDirs = @('.git', '_admin', 'node_modules', '.claude')
 # 파일 하나씩 빼는 것
 $skipFiles = @('_config.yml', 'serve.ps1', '.gitignore', '.nojekyll', 'connect.html')
-# 관리자 안에서 빼는 것 (서버에서 새로 만들어진다)
-$skipRel = @('admin/data/users.php', 'admin/data/inquiries.php', 'admin/data/lockout.php')
+# 관리자 안에서 빼는 것 (개인정보 · 서버에서 새로 만들어진다)
+# users.php(접속 계정)는 미리 만들어 두었으면 함께 올린다. 올라가면 바로 로그인할 수 있다.
+$skipRel = @('admin/data/inquiries.php', 'admin/data/lockout.php')
 
 function Should-Skip($full) {
 	$rel = $full.Substring($Root.Length).TrimStart('\') -replace '\\', '/'
