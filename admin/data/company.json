@@ -1,0 +1,51 @@
+[
+    {
+        "key":  "tel",
+        "label":  "대표 전화",
+        "note":  "상단 띠 · 푸터 · 문의 안내에 함께 쓰입니다",
+        "value":  "054-853-5696",
+        "pages":  17
+    },
+    {
+        "key":  "fax",
+        "label":  "팩스",
+        "note":  "",
+        "value":  "054-858-5698",
+        "pages":  17
+    },
+    {
+        "key":  "addr",
+        "label":  "주소",
+        "note":  "푸터와 회사소개 오시는 길에 쓰입니다",
+        "value":  "36618 경북 안동시 풍산읍 절뒤길 53 1층 (괴정리)",
+        "pages":  17
+    },
+    {
+        "key":  "biz",
+        "label":  "사업자등록번호",
+        "note":  "",
+        "value":  "508-81-22507",
+        "pages":  17
+    },
+    {
+        "key":  "email",
+        "label":  "이메일",
+        "note":  "",
+        "value":  "ecopole@naver.com",
+        "pages":  17
+    },
+    {
+        "key":  "slogan",
+        "label":  "상단 띠 문구",
+        "note":  "모든 페이지 맨 위 가로 띠",
+        "value":  "EXPECT THE UNEXPECTED — 고객의 안전과 행복을 최고의 가치로 생각하는 기업",
+        "pages":  17
+    },
+    {
+        "key":  "copy",
+        "label":  "저작권 표기",
+        "note":  "푸터 맨 아래",
+        "value":  "Copyright © 라성에너지(주). All Rights Reserved.",
+        "pages":  17
+    }
+]

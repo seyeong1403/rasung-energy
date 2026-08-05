@@ -1,0 +1,129 @@
+{
+    "pages":  [
+                  {
+                      "id":  "index",
+                      "source":  "index.html",
+                      "view":  "index.html",
+                      "title":  "메인 (홈)",
+                      "group":  "메인"
+                  },
+                  {
+                      "id":  "village-alert",
+                      "source":  "village-alert.html",
+                      "view":  "village-alert.html",
+                      "title":  "마을재난비상경보시스템",
+                      "group":  "재난방재시스템"
+                  },
+                  {
+                      "id":  "quake-alert",
+                      "source":  "quake-alert.html",
+                      "view":  "quake-alert.html",
+                      "title":  "지진경보시스템",
+                      "group":  "재난방재시스템"
+                  },
+                  {
+                      "id":  "quake-evac",
+                      "source":  "quake-evac.html",
+                      "view":  "quake-evac.html",
+                      "title":  "지진대피시스템",
+                      "group":  "재난방재시스템"
+                  },
+                  {
+                      "id":  "ai-watch",
+                      "source":  "ai-watch.html",
+                      "view":  "ai-watch.html",
+                      "title":  "AI감시시스템",
+                      "group":  "재난방재시스템"
+                  },
+                  {
+                      "id":  "social-disaster",
+                      "source":  "social-disaster.html",
+                      "view":  "social-disaster.html",
+                      "title":  "사회재난시스템",
+                      "group":  "재난방재시스템"
+                  },
+                  {
+                      "id":  "rescue-equipment",
+                      "source":  "rescue-equipment.html",
+                      "view":  "rescue-equipment.html",
+                      "title":  "재난구조장비",
+                      "group":  "재난구조장비"
+                  },
+                  {
+                      "id":  "rescue-robot",
+                      "source":  "rescue-robot.html",
+                      "view":  "rescue-robot.html",
+                      "title":  "재난구조로봇",
+                      "group":  "재난구조장비"
+                  },
+                  {
+                      "id":  "edu-system",
+                      "source":  "edu-system.html",
+                      "view":  "edu-system.html",
+                      "title":  "재난안전교육시스템",
+                      "group":  "재난안전교육"
+                  },
+                  {
+                      "id":  "edu-quake",
+                      "source":  "edu-quake.html",
+                      "view":  "edu-quake.html",
+                      "title":  "지진안전교육프로그램",
+                      "group":  "재난안전교육"
+                  },
+                  {
+                      "id":  "edu-fire",
+                      "source":  "edu-fire.html",
+                      "view":  "edu-fire.html",
+                      "title":  "화재안전교육프로그램",
+                      "group":  "재난안전교육"
+                  },
+                  {
+                      "id":  "forest",
+                      "source":  "forest.html",
+                      "view":  "forest.html",
+                      "title":  "산림사업",
+                      "group":  "산림사업"
+                  },
+                  {
+                      "id":  "about",
+                      "source":  "about.html",
+                      "view":  "about.html",
+                      "title":  "회사소개",
+                      "group":  "회사소개"
+                  },
+                  {
+                      "id":  "notice",
+                      "source":  "notice.html",
+                      "view":  "notice.html",
+                      "title":  "공지사항",
+                      "group":  "고객센터"
+                  },
+                  {
+                      "id":  "info",
+                      "source":  "info.html",
+                      "view":  "info.html",
+                      "title":  "자료실",
+                      "group":  "고객센터"
+                  },
+                  {
+                      "id":  "qa",
+                      "source":  "qa.html",
+                      "view":  "qa.html",
+                      "title":  "온라인문의",
+                      "group":  "고객센터"
+                  },
+                  {
+                      "id":  "as",
+                      "source":  "as.html",
+                      "view":  "as.html",
+                      "title":  "A/S문의",
+                      "group":  "고객센터"
+                  }
+              ],
+    "pageCount":  17,
+    "imgCount":  78,
+    "postTotal":  27,
+    "inqTotal":  0,
+    "inqNew":  0,
+    "builtAt":  "2026-08-05 11:33"
+}

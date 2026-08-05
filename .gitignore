@@ -4,11 +4,12 @@ desktop.ini
 
 # 관리자 — 개인정보 · 계정 · 백업은 올리지 않는다
 _admin/data/users.json
-_admin/접속주소.txt
-admin/data/users.php
-admin/data/inquiries.php
-admin/data/lockout.php
-admin/backups/*
-!admin/backups/.htaccess
 _admin/data/inquiries.json
 _admin/backups/
+_admin/접속주소.txt
+
+_hosting-admin/data/users.php
+_hosting-admin/data/inquiries.php
+_hosting-admin/data/lockout.php
+_hosting-admin/backups/*
+!_hosting-admin/backups/.htaccess

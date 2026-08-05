@@ -344,15 +344,6 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--brand);b
 	.inq-layout,.board-layout,.edit-layout{flex-direction:column}
 	.inq-list,.post-list,.edit-side{width:100%;flex:none;position:static}
 }
-@media (max-width:1100px){
-	#side{width:76px;flex:0 0 76px}
-	.brand-sub,.side-foot,.side-nav button span:not(.ic){display:none}
-	.side-nav button{justify-content:center}
-	.brand{font-size:14px;text-align:center}
-	#main{padding:24px 20px 60px}
-	.inq-layout,.board-layout,.edit-layout{flex-direction:column}
-	.inq-list,.post-list,.edit-side{width:100%;flex:none;position:static}
-}
 
 /* ---------------- 접속 계정 ---------------- */
 .side-me{padding:0 0 12px;margin:0 0 12px;border-bottom:1px solid rgba(255,255,255,.1)}

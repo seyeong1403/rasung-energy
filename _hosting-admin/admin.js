@@ -18,100 +18,29 @@
 const $ = (s, p) => (p || document).querySelector(s);
 const $$ = (s, p) => Array.prototype.slice.call((p || document).querySelectorAll(s));
 
-let CAN_EDIT = true;
-let ME = null;
+/* 이 계정이 저장까지 할 수 있는지 (index.php 가 알려준다) */
+const CAN_EDIT = (typeof window.CAN_EDIT === 'boolean') ? window.CAN_EDIT : true;
 
-/* -------------------------------------------------- 로그인 */
-const ACCOUNTS = [
-	{ id: 'lasung', name: '라성에너지 관리자', role: 'admin', h: 'd332eb290b671cdc2ba23e6dfd7d454b71dcead5d5a959891091c9a51c0a5647' },
-	{ id: 'guest', name: '열람용 계정', role: 'viewer', h: '9342cdf9a8ca71c6b99bc1231464cdf0f6b07c73bbf6019ba5e84dcba08f5102' }
-];
-async function sha256(s) {
-	const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
-	return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-}
-function enterAdmin(user) {
-	ME = user;
-	CAN_EDIT = (user.role === 'admin');
-	$('#gate').hidden = true;
-	$('#gateCss').disabled = true;
-	$('#adminCss').disabled = false;
-	$('#app').hidden = false;
-	const el = $('#sideMe');
-	$('b', el).textContent = user.name;
-	$('span', el).textContent = (user.role === 'admin') ? '수정 가능' : '보기 전용';
-	if (!CAN_EDIT) document.body.classList.add('readonly');
-	go((location.hash || '#dash').slice(1));
-}
-$('#gateForm').addEventListener('submit', async e => {
-	e.preventDefault();
-	const id = $('#gu').value.trim(), pw = $('#gp').value;
-	const u = ACCOUNTS.find(a => a.id === id);
-	if (!u || (await sha256(id + ':' + pw)) !== u.h) {
-		$('#gateErr').hidden = false;
-		$('#gateErr').textContent = '아이디 또는 비밀번호가 맞지 않습니다.';
-		return;
+async function api(route, body) {
+	const q = route.indexOf('?') >= 0
+		? 'api.php?r=' + route.replace('?', '&')
+		: 'api.php?r=' + route;
+	const opt = body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {};
+	opt.credentials = 'same-origin';
+	let res;
+	try {
+		res = await fetch(q, opt);
+	} catch (e) {
+		throw new Error('서버와 연결하지 못했습니다. 인터넷 연결을 확인한 뒤 새로고침해 주세요.');
 	}
-	try { sessionStorage.setItem('ls_admin', u.id); } catch (err) {}
-	enterAdmin(u);
-});
-$('#btnLogout').addEventListener('click', e => {
-	e.preventDefault();
-	try { sessionStorage.removeItem('ls_admin'); } catch (err) {}
-	location.reload();
-});
-
-/* -------------------------------------------------- 자료 읽기
-   미리 만들어 둔 파일에서 읽는다. */
-const CACHE = {};
-async function getJson(name) {
-	if (CACHE[name]) return CACHE[name];
-	const r = await fetch('data/' + name + '.json');
-	if (!r.ok) throw new Error('자료를 불러오지 못했습니다 : ' + name);
-	CACHE[name] = await r.json();
-	return CACHE[name];
-}
-
-const READ_ONLY_MSG = '이 화면에서는 저장까지 되지 않습니다. 내용 확인용으로 열어 둔 화면입니다.';
-
-async function api(route) {
-	const name = route.split('?')[0];
-	switch (name) {
-		case 'me':
-			return Object.assign({ ok: true, canEdit: CAN_EDIT }, ME);
-
-		case 'state':
-			return Object.assign({ ok: true, canEdit: CAN_EDIT, user: ME }, await getJson('state'));
-
-		case 'company':
-			return { ok: true, items: await getJson('company') };
-
-		case 'media':
-			return { ok: true, items: await getJson('media') };
-
-		case 'posts':
-			return { ok: true, items: await getJson('posts') };
-
-		case 'inquiries':
-			return { ok: true, items: [] };
-
-		case 'inquiry-state':
-			return { ok: true, on: false };
-
-		case 'backups':
-			return { ok: true, items: [] };
-
-		case 'file': {
-			/* 실제 페이지 파일을 그대로 읽어 온다 */
-			const path = decodeURIComponent(route.split('path=')[1] || '');
-			const r = await fetch('../' + path);
-			if (!r.ok) throw new Error('파일을 불러오지 못했습니다 : ' + path);
-			return { ok: true, path, content: await r.text() };
-		}
-
-		default:
-			throw new Error(READ_ONLY_MSG);
+	let json;
+	try { json = await res.json(); } catch (e) { throw new Error('서버 응답을 읽을 수 없습니다. (' + res.status + ')'); }
+	if (json.needLogin) {
+		location.href = 'login.php';
+		throw new Error('로그인이 필요합니다.');
 	}
+	if (!json.ok) throw new Error(json.error || '알 수 없는 오류');
+	return json;
 }
 
 let toastTimer;
@@ -190,10 +119,8 @@ $$('[data-go]').forEach(b => b.addEventListener('click', () => go(b.dataset.go))
 async function loadState() {
 	STATE = await api('state');
 	const b = $('#inqBadge');
-	if (b) {
-		b.hidden = !STATE.inqNew;
-		b.textContent = STATE.inqNew;
-	}
+	b.hidden = !STATE.inqNew;
+	b.textContent = STATE.inqNew;
 	return STATE;
 }
 
@@ -219,12 +146,14 @@ views.dash = async function () {
 		let wired = false;
 		try { wired = (await api('inquiry-state')).on; } catch (e) {}
 		const checks = [
+			['저장하면 곧바로 홈페이지에 반영됩니다. 따로 올리는 과정이 없습니다.', true],
 			['상단 메뉴 · 푸터처럼 모든 페이지에 같이 들어가는 정보는 「회사 정보」에서 고쳐야 전 페이지에 반영됩니다.', true],
-			['공지사항 · 자료실 목록은 자동으로 만들어집니다. 파일을 직접 고치지 마세요.', true],
 			[wired
-				? '문의 폼이 이 관리자로 연결되어 있습니다. (관리자를 켜 둔 동안에만 접수됩니다)'
+				? '홈페이지 문의 폼이 연결되어 있습니다. 24시간 자동으로 접수됩니다.'
 				: '문의 폼이 아직 연결되지 않았습니다. 「문의 접수」 화면에서 연결할 수 있습니다.', wired],
-			['기존 공지 15건 · 자료실 12건은 제목과 날짜만 옮겨져 있습니다. 본문을 채우면 상세 페이지가 자동으로 만들어집니다.', false]
+			[CAN_EDIT
+				? '기존 공지 15건 · 자료실 12건은 제목과 날짜만 옮겨져 있습니다. 본문을 채우면 상세 페이지가 자동으로 만들어집니다.'
+				: '지금 계정은 보기 전용입니다. 저장 · 되돌리기는 잠겨 있습니다.', false]
 		];
 		$('#dashCheck').innerHTML = checks.map(c => `<li class="${c[1] ? 'ok' : ''}">${esc(c[0])}</li>`).join('');
 	} catch (e) { fail(e); }
@@ -269,7 +198,7 @@ async function openPage(id) {
 	busy(true, '페이지를 불러오는 중…');
 	try {
 		const r = await api('file?path=' + encodeURIComponent(page.source));
-		ED = { page, src: r.content, fields: [], dirty: false };
+		ED = { page, src: r.content, sig: r.sig, fields: [], dirty: false };
 		collectFields();
 		renderFields();
 
@@ -279,7 +208,7 @@ async function openPage(id) {
 		$('#edPath').textContent = page.source + ' · 편집 가능한 항목 ' + (ED.fields.length - locked) + '개' + (locked ? ' (자동 인식 실패 ' + locked + '개)' : '');
 		$('#edSave').disabled = true;
 		$('#edDirty').hidden = true;
-		$('#edPrev').src = '../' + page.view;
+		$('#edPrev').src = '../' + page.view + '?t=' + Date.now();
 		applyPreviewWidth();
 	} catch (e) { fail(e); } finally { busy(false); }
 }
@@ -639,7 +568,7 @@ $('#edSave').addEventListener('click', async () => {
 			out = out.slice(0, f.start) + v + out.slice(f.end);
 		});
 
-		await api('save', { path: ED.page.source, content: out, baseLen: ED.src.length });
+		await api('save', { path: ED.page.source, content: out, baseSig: ED.sig });
 		toast('저장했습니다. 미리보기를 새로 불러옵니다.');
 		const id = ED.page.id;
 		ED.dirty = false;
@@ -708,9 +637,16 @@ views.media = async function () {
 		if (!STATE) await loadState();
 		MEDIA = (await api('media')).items || [];
 
-		/* 어느 페이지에서 쓰이는지는 미리 정리해 두었다 */
+		/* 어느 페이지에서 쓰이는지 찾아 둔다 */
 		MEDIA_USE = {};
-		MEDIA.forEach(f => { MEDIA_USE[f.path] = f.used || []; });
+		for (const p of STATE.pages) {
+			const r = await api('file?path=' + encodeURIComponent(p.source));
+			MEDIA.forEach(f => {
+				if (r.content.indexOf(f.path) >= 0) {
+					(MEDIA_USE[f.path] = MEDIA_USE[f.path] || []).push(p.title);
+				}
+			});
+		}
 
 		const folders = [];
 		MEDIA.forEach(f => { if (folders.indexOf(f.folder) < 0) folders.push(f.folder); });
@@ -731,7 +667,7 @@ function renderImages() {
 		const use = MEDIA_USE[f.path] || [];
 		return `<div class="img-card" data-i="${i}">
 			<div class="img-thumb">
-				<img src="../${esc(f.path)}" alt="" loading="lazy">
+				<img src="../${esc(f.path)}?t=${esc(String(f.mtime).replace(/\D/g, ''))}" alt="" loading="lazy">
 				<div class="drop-hint">클릭하거나 사진을<br>여기로 끌어다 놓으면<br>이 자리 사진이 바뀝니다</div>
 			</div>
 			<div class="img-body">
@@ -803,11 +739,11 @@ async function renderInqEndpoint() {
 	$('#inqEndpoint').innerHTML = `
 		<h2 class="panel-tit">홈페이지 문의 폼 연결 상태</h2>
 		<p class="panel-desc">${on
-			? '<b>연결됨</b> — 관리자를 켜 둔 동안 홈페이지 온라인문의·A/S문의에 들어온 내용이 이 화면으로 바로 들어옵니다.'
-			: '<b>연결 안 됨</b> — 지금은 방문자가 문의를 넣어도 접수되지 않고 안내 문구만 나옵니다. 아래 버튼을 누르면 관리자 실행 중에 실제로 접수됩니다.'}</p>
-		<p class="panel-desc" style="color:var(--txt-3)">이 연결은 <b>내 PC에서 열었을 때만</b> 동작합니다. 인터넷에 올려도 방문자에게는 영향이 없습니다.
-		방문자 문의를 24시간 받으려면 호스팅 업체의 접수 서버(PHP 등)나 메일 폼 서비스가 필요합니다.</p>
-		<button type="button" class="btn ${on ? 'danger' : 'primary'}" id="inqToggle">${on ? '연결 끄기' : '연결 켜기'}</button>`;
+			? '<b>연결됨</b> — 홈페이지 온라인문의·A/S문의에 들어온 내용이 <b>24시간 자동으로</b> 이 화면에 쌓입니다.'
+			: '<b>연결 안 됨</b> — 지금은 방문자가 문의를 넣어도 접수되지 않고 안내 문구만 나옵니다. 아래 버튼을 누르면 바로 접수되기 시작합니다.'}</p>
+		<p class="panel-desc" style="color:var(--txt-3)">접수된 내용은 이 서버에 저장됩니다. 메일로도 받고 싶으시면 알려 주세요.</p>
+		${CAN_EDIT ? `<button type="button" class="btn ${on ? 'danger' : 'primary'}" id="inqToggle">${on ? '연결 끄기' : '연결 켜기'}</button>` : ''}`;
+	if (!CAN_EDIT) return;
 	$('#inqToggle').onclick = async () => {
 		busy(true, '설정을 바꾸는 중…');
 		try {
@@ -1065,19 +1001,115 @@ $('#boardPublish').addEventListener('click', async () => {
 		console.log(r.log);
 	} catch (e) { fail(e); } finally { busy(false); }
 });
-/* -------------------------------------------------- 시작 */
-/* 이 화면에서는 저장 · 되돌리기가 동작하지 않으므로 눌렀을 때 안내만 한다. */
-['#edSave', '#coSave', '#postNew', '#boardPublish', '#inqAdd', '#inqCsv'].forEach(s => {
-	const b = $(s);
-	if (b) b.addEventListener('click', e => { e.stopImmediatePropagation(); toast(READ_ONLY_MSG); }, true);
+
+/* ============================================================
+   7. 접속 계정
+   ============================================================ */
+const ROLE_NAME = { admin: '수정 가능', viewer: '보기 전용' };
+
+views.account = async function () {
+	try {
+		const r = await api('users');
+		$('#userPanel').hidden = !r.canEdit;
+		$('#userList').innerHTML = r.items.map(u => `
+			<div class="user-row">
+				<span class="uid">${esc(u.id)}${u.me ? '<em>나</em>' : ''}</span>
+				<span class="unm">${esc(u.name)}</span>
+				<span class="urole ${u.role}">${ROLE_NAME[u.role] || u.role}</span>
+				<span class="uat">${esc(u.at || '')}</span>
+				<span class="ubtn">
+					<button type="button" class="btn ghost sm" data-edit="${esc(u.id)}">고치기</button>
+					${u.me ? '' : `<button type="button" class="btn danger sm" data-del="${esc(u.id)}">삭제</button>`}
+				</span>
+			</div>`).join('') || '<p class="empty-msg">계정이 없습니다.</p>';
+
+		$$('#userList [data-edit]').forEach(b => b.onclick = () => {
+			const u = r.items.find(x => x.id === b.dataset.edit);
+			userForm(u);
+		});
+		$$('#userList [data-del]').forEach(b => b.onclick = async () => {
+			if (!(await confirmBox('계정 삭제', `<b>${esc(b.dataset.del)}</b> 계정을 지웁니다. 이 아이디로는 더 이상 들어올 수 없습니다.`, '삭제'))) return;
+			busy(true, '지우는 중…');
+			try { await api('user-delete', { id: b.dataset.del }); toast('지웠습니다.'); views.account(); }
+			catch (e) { fail(e); } finally { busy(false); }
+		});
+	} catch (e) { fail(e); }
+};
+
+function userForm(u) {
+	const isNew = !u;
+	$('#modalBox').innerHTML = `<h3>${isNew ? '계정 추가' : '계정 고치기'}</h3>
+		<div class="form-row2"><label>아이디 <span class="hint">영문·숫자 3~20자</span></label>
+			<input type="text" id="u_id" value="${esc(isNew ? '' : u.id)}" ${isNew ? '' : 'readonly'}></div>
+		<div class="form-row2"><label>이름</label><input type="text" id="u_name" value="${esc(isNew ? '' : u.name)}" placeholder="예) 홍길동"></div>
+		<div class="form-row2"><label>권한</label>
+			<select id="u_role">
+				<option value="admin"${(!isNew && u.role === 'admin') ? ' selected' : ''}>수정 가능 — 모든 기능</option>
+				<option value="viewer"${(!isNew && u.role === 'viewer') ? ' selected' : ''}>보기 전용 — 저장·되돌리기 잠김</option>
+			</select></div>
+		<div class="form-row2"><label>비밀번호 <span class="hint">${isNew ? '8자 이상' : '바꿀 때만 입력'}</span></label>
+			<input type="password" id="u_pass" autocomplete="new-password"></div>
+		<div class="modal-btns"><button type="button" class="btn ghost" data-c="1">취소</button>
+			<button type="button" class="btn primary" id="u_ok">저장</button></div>`;
+	$('#modal').hidden = false;
+	$('#modalBox').querySelector('[data-c]').onclick = () => { $('#modal').hidden = true; };
+	$('#u_ok').onclick = async () => {
+		busy(true, '저장하는 중…');
+		try {
+			await api('user-save', {
+				id: $('#u_id').value.trim(), name: $('#u_name').value.trim(),
+				role: $('#u_role').value, pass: $('#u_pass').value
+			});
+			$('#modal').hidden = true;
+			toast('저장했습니다.');
+			views.account();
+		} catch (e) { fail(e); } finally { busy(false); }
+	};
+}
+
+$('#userAdd').addEventListener('click', () => userForm(null));
+
+$('#pwSave').addEventListener('click', async () => {
+	const o = $('#pwOld').value, n = $('#pwNew').value;
+	if (!o || !n) return toast('비밀번호를 입력해 주세요.', true);
+	busy(true, '바꾸는 중…');
+	try {
+		await api('password', { old: o, new: n });
+		$('#pwOld').value = ''; $('#pwNew').value = '';
+		toast('비밀번호를 바꿨습니다. 다음 로그인부터 적용됩니다.');
+	} catch (e) { fail(e); } finally { busy(false); }
 });
 
-/* 새로고침해도 로그인 상태를 이어 간다 */
-(function () {
-	let saved = null;
-	try { saved = sessionStorage.getItem('ls_admin'); } catch (e) {}
-	const u = saved && ACCOUNTS.find(a => a.id === saved);
-	if (u) enterAdmin(u);
-})();
+/* ============================================================
+   8. 백업 · 되돌리기
+   ============================================================ */
+views.backup = async function () {
+	try {
+		const r = await api('backups');
+		$('#backupList').innerHTML = r.items.length ? r.items.map(b => `
+			<div class="bk-row">
+				<span class="f">${esc(b.name.replace(/^\d{8}-\d{6}__/, '').replace(/__/g, ' / '))}</span>
+				<span class="t">${esc(b.at)}</span>
+				${CAN_EDIT ? `<button type="button" class="btn ghost sm" data-bk="${esc(b.name)}">이 시점으로 되돌리기</button>` : ''}
+			</div>`).join('') : '<p class="empty-msg">아직 백업이 없습니다.</p>';
+		$$('#backupList [data-bk]').forEach(b => b.onclick = async () => {
+			if (!(await confirmBox('되돌리기', '이 시점의 파일로 되돌립니다. 지금 상태는 새 백업으로 보관됩니다.', '되돌리기'))) return;
+			busy(true, '되돌리는 중…');
+			try { await api('restore', { name: b.dataset.bk }); toast('되돌렸습니다.'); views.backup(); }
+			catch (e) { fail(e); } finally { busy(false); }
+		});
+	} catch (e) { fail(e); }
+};
+
+/* -------------------------------------------------- 보기 전용 계정 처리 */
+if (!CAN_EDIT) {
+	['#edSave', '#coSave', '#postNew', '#boardPublish', '#inqAdd'].forEach(s => {
+		const el = $(s);
+		if (el) { el.disabled = true; el.title = '보기 전용 계정입니다.'; }
+	});
+}
+
+/* -------------------------------------------------- 시작 */
+go((location.hash || '#dash').slice(1));
 
 })();
