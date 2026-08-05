@@ -21,9 +21,7 @@ param(
 	[int]$Port = 8881,
 	[string]$Root = '',
 	[switch]$NoBrowser,
-	[string]$Password = '',
-	[string]$User = 'admin',
-	[switch]$ReadOnly
+	[switch]$Open          # 외부 공유용. 다른 PC에서도 들어올 수 있게 연다.
 )
 
 $ErrorActionPreference = 'Stop'
@@ -49,48 +47,123 @@ foreach ($d in @($DataDir, $BackupDir)) {
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 $Utf8Bom = New-Object System.Text.UTF8Encoding($true)
 
-# 로그인 세션. 서버를 끄면 사라진다. (-Password 를 쓸 때만 의미가 있다)
-$SessionToken = [Guid]::NewGuid().ToString('N')
+# ---------- 계정 ----------
+# 아이디 · 비밀번호로 들어온다. 비밀번호는 되돌릴 수 없는 형태로 저장한다.
+$UsersFile = Join-Path $DataDir 'users.json'
+# 로그인한 사람 목록. 서버를 끄면 사라진다. (토큰 → 아이디)
+$Sessions = @{}
+# 비밀번호를 계속 찍어 보는 것을 막는다. (접속지 → 실패 횟수 · 시각)
+$LoginFails = @{}
 
-function Get-LoginPage($msg) {
+function New-PassHash($pass) {
+	$salt = New-Object byte[] 16
+	$rng = New-Object System.Security.Cryptography.RNGCryptoServiceProvider
+	$rng.GetBytes($salt)
+	$k = New-Object System.Security.Cryptography.Rfc2898DeriveBytes($pass, $salt, 120000)
+	$hash = $k.GetBytes(32)
+	return 'pbkdf2:120000:' + [Convert]::ToBase64String($salt) + ':' + [Convert]::ToBase64String($hash)
+}
+function Test-PassHash($pass, $stored) {
+	try {
+		$p = ([string]$stored).Split(':')
+		if ($p.Count -ne 4 -or $p[0] -ne 'pbkdf2') { return $false }
+		$iter = [int]$p[1]
+		$salt = [Convert]::FromBase64String($p[2])
+		$want = [Convert]::FromBase64String($p[3])
+		$k = New-Object System.Security.Cryptography.Rfc2898DeriveBytes($pass, $salt, $iter)
+		$got = $k.GetBytes($want.Length)
+		$diff = 0
+		for ($i = 0; $i -lt $want.Length; $i++) { $diff = $diff -bor ($want[$i] -bxor $got[$i]) }
+		return ($diff -eq 0)
+	} catch { return $false }
+}
+function Get-Users {
+	if (-not (Test-Path -LiteralPath $UsersFile -PathType Leaf)) { return @() }
+	$raw = ([System.IO.File]::ReadAllText($UsersFile, [System.Text.Encoding]::UTF8)).Trim()
+	if (-not $raw) { return @() }
+	try { $parsed = ConvertFrom-Json $raw } catch { return @() }
+	return @($parsed)
+}
+function Save-Users($users) {
+	$json = ConvertTo-Json @($users) -Depth 10
+	[System.IO.File]::WriteAllText($UsersFile, $json, (New-Object System.Text.UTF8Encoding($false)))
+}
+function Get-UserById($id) {
+	foreach ($u in (Get-Users)) { if ($u.id -ceq $id) { return $u } }
+	return $null
+}
+function Test-NeedSetup { return ((Get-Users).Count -eq 0) }
+
+function Get-GatePage($mode, $msg) {
+	# mode : 'login' 또는 'setup'
 	$warn = ''
 	if ($msg) { $warn = '<p class="err">' + $msg + '</p>' }
+
+	$title = '라성에너지(주) 홈페이지 관리자'
+	$head = '라성에너지(주)<span>홈페이지 관리자</span>'
+	$sub = '아이디와 비밀번호를 입력해 주세요.'
+	$foot = '담당자에게 받은 아이디와 비밀번호가 필요합니다.'
+	$action = '/login'
+	$fields = @"
+  <label for="u">아이디</label>
+  <input id="u" name="user" autocomplete="username" autofocus required>
+  <label for="p">비밀번호</label>
+  <input id="p" name="pass" type="password" autocomplete="current-password" required>
+  <button type="submit">들어가기</button>
+"@
+	if ($mode -eq 'setup') {
+		$title = '관리자 계정 만들기'
+		$head = '관리자 계정 만들기<span>처음 한 번만 나오는 화면입니다</span>'
+		$sub = '앞으로 홈페이지를 관리할 아이디와 비밀번호를 정해 주세요. 이 화면은 계정을 만들고 나면 다시 열리지 않습니다.'
+		$foot = '직원용 계정은 나중에 관리자 화면의 「접속 계정」에서 추가할 수 있습니다.'
+		$action = '/setup'
+		$fields = @"
+  <label for="u">아이디 <em>영문 · 숫자 3~20자</em></label>
+  <input id="u" name="user" autofocus required placeholder="예) lasung">
+  <label for="n">이름 <em>화면에 표시됩니다</em></label>
+  <input id="n" name="name" placeholder="예) 홍길동">
+  <label for="p">비밀번호 <em>8자 이상</em></label>
+  <input id="p" name="pass" type="password" required>
+  <label for="p2">비밀번호 확인</label>
+  <input id="p2" name="pass2" type="password" required>
+  <button type="submit">계정 만들고 시작하기</button>
+"@
+	}
+
 	return @"
 <!doctype html><html lang="ko"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
-<title>라성에너지(주) 홈페이지 관리자</title>
+<title>$title</title>
 <style>
-*{box-sizing:border-box}
-body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
- background:#0c2233;font:16px/1.7 'Malgun Gothic',system-ui,sans-serif;word-break:keep-all;padding:24px}
-.box{width:100%;max-width:380px;background:#fff;border-radius:14px;padding:40px 34px;
+*{box-sizing:border-box;margin:0;padding:0}
+body{min-height:100vh;display:flex;align-items:center;justify-content:center;
+ background:#0C2233;font:16px/1.7 'Pretendard','Malgun Gothic',system-ui,sans-serif;word-break:keep-all;padding:24px;color:#16202A}
+.box{width:100%;max-width:420px;background:#fff;border-radius:14px;padding:40px 34px;
  box-shadow:0 20px 60px rgba(0,0,0,.35)}
-h1{margin:0 0 4px;font-size:20px;color:#0c2233;letter-spacing:-.02em}
-.sub{margin:0 0 28px;font-size:14px;color:#707172}
+h1{font-size:20px;font-weight:700;color:#0C2233;letter-spacing:-.02em;line-height:1.4}
+h1 span{display:block;font-size:14px;font-weight:500;color:#0087BC;margin-top:2px}
+.sub{margin:14px 0 26px;font-size:14px;color:#57606B}
 label{display:block;font-size:14px;font-weight:700;color:#334155;margin:0 0 7px}
-input{width:100%;padding:12px 14px;font-size:16px;border:1px solid #cfd6dd;border-radius:8px;
- margin-bottom:18px;font-family:inherit}
-input:focus{outline:none;border-color:#0087bc;box-shadow:0 0 0 3px rgba(0,135,188,.16)}
-button{width:100%;padding:13px;font-size:16px;font-weight:700;color:#fff;background:#0087bc;
+label em{font-style:normal;font-weight:500;color:#8A929B;font-size:13px;margin-left:6px}
+input{width:100%;padding:12px 14px;font-size:16px;border:1px solid #CFD6DD;border-radius:8px;
+ margin-bottom:18px;font-family:inherit;color:inherit}
+input:focus{outline:none;border-color:#0087BC;box-shadow:0 0 0 3px rgba(0,135,188,.16)}
+button{width:100%;padding:13px;font-size:16px;font-weight:700;color:#fff;background:#0087BC;
  border:0;border-radius:8px;cursor:pointer;font-family:inherit}
-button:hover{background:#0076a4}
-.err{margin:0 0 18px;padding:11px 14px;background:#fef3f2;border:1px solid #fda29b;
- border-radius:8px;color:#b42318;font-size:14px}
-.foot{margin:24px 0 0;font-size:13px;color:#98a2b3;text-align:center}
+button:hover{background:#0076A4}
+.err{margin:0 0 18px;padding:11px 14px;background:#FEF3F2;border:1px solid #FDA29B;
+ border-radius:8px;color:#B42318;font-size:14px}
+.foot{margin:24px 0 0;font-size:13px;color:#98A2B3;text-align:center;line-height:1.6}
 </style></head><body>
 <div class="box">
- <h1>라성에너지(주) 홈페이지 관리자</h1>
- <p class="sub">아이디와 비밀번호를 입력해 주세요.</p>
+ <h1>$head</h1>
+ <p class="sub">$sub</p>
  $warn
- <form method="post" action="/login">
-  <label for="u">아이디</label>
-  <input id="u" name="user" autocomplete="username" autofocus>
-  <label for="p">비밀번호</label>
-  <input id="p" name="pass" type="password" autocomplete="current-password">
-  <button type="submit">들어가기</button>
+ <form method="post" action="$action" autocomplete="on">
+$fields
  </form>
- <p class="foot">담당자에게 받은 아이디와 비밀번호가 필요합니다.</p>
+ <p class="foot">$foot</p>
 </div></body></html>
 "@
 }
@@ -406,12 +479,12 @@ Write-Host "  └─────────────────────
 Write-Host "   관리자   $adminUrl" -ForegroundColor White
 Write-Host "   사이트   http://localhost:$Port/" -ForegroundColor Gray
 Write-Host "   폴더     $Root" -ForegroundColor DarkGray
-if ($Password) {
+if (Test-NeedSetup) {
 	Write-Host ""
-	Write-Host "   비밀번호 켜짐   아이디 $User  /  비밀번호 $Password" -ForegroundColor Yellow
-}
-if ($ReadOnly) {
-	Write-Host "   구경만 모드     저장 · 배포가 잠겨 있습니다." -ForegroundColor Yellow
+	Write-Host "   처음 실행입니다. 화면에서 아이디와 비밀번호를 정해 주세요." -ForegroundColor Yellow
+} else {
+	Write-Host "   계정     " -NoNewline -ForegroundColor DarkGray
+	Write-Host (((Get-Users) | ForEach-Object { $_.id }) -join ', ') -ForegroundColor Gray
 }
 Write-Host ""
 Write-Host "   ※ 이 창을 닫으면 관리자가 종료됩니다." -ForegroundColor DarkYellow
@@ -435,44 +508,51 @@ while ($listener.IsListening) {
 		$ctx.Response.Headers['Access-Control-Allow-Headers'] = 'Content-Type'
 		if ($method -eq 'OPTIONS') { $ctx.Response.StatusCode = 204; $ctx.Response.OutputStream.Close(); continue }
 
-		# ---------- 로그인 (외부에 열어 둔 동안) ----------
-		if ($Password) {
-			$okAuth = $false
+		# ---------- 로그인 ----------
+		# 방문자 문의 접수와 사이트 화면은 로그인 없이 열어 둔다.
+		$isSiteFile = -not ($path.StartsWith('/admin') -or $path.StartsWith('/api/') -or $path -eq '/login' -or $path -eq '/setup' -or $path -eq '/logout')
+		$isPublicApi = ($path -eq '/api/inquiry' -or $path -eq '/api/ping')
 
-			# 1) 로그인 쿠키
-			$ck = $req.Headers['Cookie']
-			if ($ck -and $ck -match 'lsadmin=([0-9a-f]{32})') {
-				if ($Matches[1] -ceq $SessionToken) { $okAuth = $true }
-			}
-			# 2) Basic 헤더 (점검 · 스크립트용. 브라우저는 위 쿠키를 쓴다)
-			if (-not $okAuth) {
-				$hdr = $req.Headers['Authorization']
-				if ($hdr -and $hdr.StartsWith('Basic ', [StringComparison]::OrdinalIgnoreCase)) {
-					try {
-						$dec = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($hdr.Substring(6).Trim()))
-						$sep = $dec.IndexOf(':')
-						if ($sep -ge 0 -and $dec.Substring(0, $sep) -ceq $User -and $dec.Substring($sep + 1) -ceq $Password) { $okAuth = $true }
-					} catch {}
-				}
-			}
+		$me = $null
+		$ck = $req.Headers['Cookie']
+		if ($ck -and $ck -match 'lsadmin=([0-9a-f]{32})') {
+			$tok = $Matches[1]
+			if ($Sessions.ContainsKey($tok)) { $me = Get-UserById $Sessions[$tok] }
+		}
 
-			if (-not $okAuth) {
-				if ($path -eq '/login' -and $method -eq 'POST') {
+		if (-not $isSiteFile -and -not $isPublicApi) {
+
+			# --- 계정 만들기 (처음 한 번) ---
+			if (Test-NeedSetup) {
+				if ($path -eq '/setup' -and $method -eq 'POST') {
 					$rawForm = ''
 					try {
 						$sr = New-Object System.IO.StreamReader($req.InputStream, [System.Text.Encoding]::UTF8)
 						$rawForm = $sr.ReadToEnd()
 					} catch {}
 					$form = [System.Web.HttpUtility]::ParseQueryString($rawForm)
-					if ($form['user'] -ceq $User -and $form['pass'] -ceq $Password) {
-						$ctx.Response.AddHeader('Set-Cookie', "lsadmin=$SessionToken; Path=/; HttpOnly; SameSite=Lax")
+					$nid = ([string]$form['user']).Trim()
+					$nnm = ([string]$form['name']).Trim()
+					$np = [string]$form['pass']
+					$np2 = [string]$form['pass2']
+					$err = ''
+					if ($nid -notmatch '^[A-Za-z0-9_-]{3,20}$') { $err = '아이디는 영문 · 숫자 3~20자로 지어 주세요.' }
+					elseif ($np.Length -lt 8) { $err = '비밀번호는 8자 이상으로 정해 주세요.' }
+					elseif ($np -cne $np2) { $err = '비밀번호 확인이 일치하지 않습니다.' }
+
+					if (-not $err) {
+						if (-not $nnm) { $nnm = $nid }
+						Save-Users @(, ([ordered]@{ id = $nid; name = $nnm; role = 'admin'; pass = (New-PassHash $np); at = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss') }))
+						$tok = [Guid]::NewGuid().ToString('N')
+						$Sessions[$tok] = $nid
+						$ctx.Response.AddHeader('Set-Cookie', "lsadmin=$tok; Path=/; HttpOnly; SameSite=Lax")
 						$ctx.Response.StatusCode = 302
 						$ctx.Response.AddHeader('Location', '/admin/')
 						$ctx.Response.OutputStream.Close()
 						continue
 					}
-					$bz = $Utf8NoBom.GetBytes((Get-LoginPage '아이디 또는 비밀번호가 맞지 않습니다.'))
-					$ctx.Response.StatusCode = 401
+					$bz = $Utf8NoBom.GetBytes((Get-GatePage 'setup' $err))
+					$ctx.Response.StatusCode = 200
 					$ctx.Response.ContentType = 'text/html; charset=utf-8'
 					$ctx.Response.OutputStream.Write($bz, 0, $bz.Length)
 					$ctx.Response.OutputStream.Close()
@@ -481,11 +561,82 @@ while ($listener.IsListening) {
 				if ($path.StartsWith('/api/')) {
 					$ctx.Response.StatusCode = 401
 					$ctx.Response.ContentType = 'application/json; charset=utf-8'
-					$bz = $Utf8NoBom.GetBytes('{"ok":false,"error":"로그인이 필요합니다."}')
+					$bz = $Utf8NoBom.GetBytes('{"ok":false,"error":"관리자 계정을 먼저 만들어 주세요.","needLogin":true}')
 				} else {
+					$ctx.Response.StatusCode = 200
+					$ctx.Response.ContentType = 'text/html; charset=utf-8'
+					$bz = $Utf8NoBom.GetBytes((Get-GatePage 'setup' ''))
+				}
+				$ctx.Response.OutputStream.Write($bz, 0, $bz.Length)
+				$ctx.Response.OutputStream.Close()
+				continue
+			}
+
+			# --- 로그아웃 ---
+			if ($path -eq '/logout') {
+				if ($ck -and $ck -match 'lsadmin=([0-9a-f]{32})') { $Sessions.Remove($Matches[1]) }
+				$ctx.Response.AddHeader('Set-Cookie', 'lsadmin=; Path=/; HttpOnly; Max-Age=0')
+				$ctx.Response.StatusCode = 302
+				$ctx.Response.AddHeader('Location', '/admin/')
+				$ctx.Response.OutputStream.Close()
+				continue
+			}
+
+			# --- 로그인 처리 ---
+			if (-not $me) {
+				if ($path -eq '/login' -and $method -eq 'POST') {
+					$ip = $req.RemoteEndPoint.Address.ToString()
+					$wait = 0
+					if ($LoginFails.ContainsKey($ip)) {
+						$f = $LoginFails[$ip]
+						if ($f.n -ge 5) {
+							$left = 300 - [int]((Get-Date) - $f.t).TotalSeconds
+							if ($left -gt 0) { $wait = $left } else { $LoginFails.Remove($ip) }
+						}
+					}
+
+					$rawForm = ''
+					try {
+						$sr = New-Object System.IO.StreamReader($req.InputStream, [System.Text.Encoding]::UTF8)
+						$rawForm = $sr.ReadToEnd()
+					} catch {}
+					$form = [System.Web.HttpUtility]::ParseQueryString($rawForm)
+
+					if ($wait -gt 0) {
+						$bz = $Utf8NoBom.GetBytes((Get-GatePage 'login' ("비밀번호를 여러 번 잘못 입력했습니다. " + [math]::Ceiling($wait / 60) + "분 뒤에 다시 시도해 주세요.")))
+					} else {
+						$u = Get-UserById (([string]$form['user']).Trim())
+						if ($u -and (Test-PassHash ([string]$form['pass']) $u.pass)) {
+							$LoginFails.Remove($ip)
+							$tok = [Guid]::NewGuid().ToString('N')
+							$Sessions[$tok] = $u.id
+							$ctx.Response.AddHeader('Set-Cookie', "lsadmin=$tok; Path=/; HttpOnly; SameSite=Lax")
+							$ctx.Response.StatusCode = 302
+							$ctx.Response.AddHeader('Location', '/admin/')
+							$ctx.Response.OutputStream.Close()
+							Write-Host ("  [로그인] " + $u.id + "  (" + $ip + ")") -ForegroundColor DarkGreen
+							continue
+						}
+						$n = 1
+						if ($LoginFails.ContainsKey($ip) -and ((Get-Date) - $LoginFails[$ip].t).TotalSeconds -lt 300) { $n = $LoginFails[$ip].n + 1 }
+						$LoginFails[$ip] = @{ n = $n; t = (Get-Date) }
+						$bz = $Utf8NoBom.GetBytes((Get-GatePage 'login' '아이디 또는 비밀번호가 맞지 않습니다.'))
+					}
 					$ctx.Response.StatusCode = 401
 					$ctx.Response.ContentType = 'text/html; charset=utf-8'
-					$bz = $Utf8NoBom.GetBytes((Get-LoginPage ''))
+					$ctx.Response.OutputStream.Write($bz, 0, $bz.Length)
+					$ctx.Response.OutputStream.Close()
+					continue
+				}
+
+				if ($path.StartsWith('/api/')) {
+					$ctx.Response.StatusCode = 401
+					$ctx.Response.ContentType = 'application/json; charset=utf-8'
+					$bz = $Utf8NoBom.GetBytes('{"ok":false,"error":"로그인이 필요합니다.","needLogin":true}')
+				} else {
+					$ctx.Response.StatusCode = 200
+					$ctx.Response.ContentType = 'text/html; charset=utf-8'
+					$bz = $Utf8NoBom.GetBytes((Get-GatePage 'login' ''))
 				}
 				$ctx.Response.OutputStream.Write($bz, 0, $bz.Length)
 				$ctx.Response.OutputStream.Close()
@@ -493,12 +644,14 @@ while ($listener.IsListening) {
 			}
 		}
 
-		# ---------- 읽기 전용 (구경만 시킬 때) ----------
-		# 문의 접수(/api/inquiry)는 방문자 기능이라 막지 않는다.
-		if ($ReadOnly -and $method -eq 'POST' -and $path -ne '/api/inquiry' -and $path -ne '/login') {
+		# ---------- 권한 ----------
+		# 보기 전용 계정은 저장 · 변경을 할 수 없다. (버튼뿐 아니라 여기서도 막는다)
+		$canEdit = ($me -and $me.role -eq 'admin')
+		# 자기 비밀번호 바꾸기는 보기 전용 계정도 할 수 있다.
+		if ($method -eq 'POST' -and -not $canEdit -and -not $isPublicApi -and $path -ne '/api/password') {
 			$ctx.Response.StatusCode = 403
 			$ctx.Response.ContentType = 'application/json; charset=utf-8'
-			$bz = $Utf8NoBom.GetBytes('{"ok":false,"error":"구경만 할 수 있는 모드입니다. 저장·배포는 잠겨 있습니다."}')
+			$bz = $Utf8NoBom.GetBytes('{"ok":false,"error":"이 계정은 보기 전용입니다. 저장 권한이 없습니다."}')
 			$ctx.Response.OutputStream.Write($bz, 0, $bz.Length)
 			$ctx.Response.OutputStream.Close()
 			continue
@@ -531,8 +684,84 @@ while ($listener.IsListening) {
 							inqNew    = $newCnt
 							postTotal = $posts.Count
 							port      = $Port
-							readOnly  = [bool]$ReadOnly
+							canEdit   = $canEdit
+							user      = [ordered]@{ id = $me.id; name = $me.name; role = $me.role }
 						})
+				}
+
+				# --- 계정 ---
+				'me' {
+					Send-Json $ctx ([ordered]@{ ok = $true; id = $me.id; name = $me.name; role = $me.role; canEdit = $canEdit })
+				}
+
+				'users' {
+					$items = New-Object System.Collections.ArrayList
+					foreach ($u in (Get-Users)) {
+						[void]$items.Add([ordered]@{ id = $u.id; name = $u.name; role = $u.role; at = $u.at; me = ($u.id -ceq $me.id) })
+					}
+					Send-Json $ctx ([ordered]@{ ok = $true; items = @($items.ToArray()); canEdit = $canEdit })
+				}
+
+				'user-save' {
+					$uid = ([string]$body.id).Trim()
+					$unm = ([string]$body.name).Trim()
+					$role = 'viewer'
+					if ($body.role -eq 'admin') { $role = 'admin' }
+					$pw = [string]$body.pass
+					if ($uid -notmatch '^[A-Za-z0-9_-]{3,20}$') { throw '아이디는 영문 · 숫자 3~20자로 지어 주세요.' }
+
+					$users = @(Get-Users)
+					$idx = -1
+					for ($i = 0; $i -lt $users.Count; $i++) { if ($users[$i].id -ceq $uid) { $idx = $i; break } }
+
+					if ($idx -lt 0) {
+						if ($pw.Length -lt 8) { throw '비밀번호는 8자 이상으로 정해 주세요.' }
+						if (-not $unm) { $unm = $uid }
+						$users = @($users) + @([ordered]@{ id = $uid; name = $unm; role = $role; pass = (New-PassHash $pw); at = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss') })
+					} else {
+						if ($uid -ceq $me.id -and $role -ne 'admin') { throw '지금 로그인한 계정의 권한은 낮출 수 없습니다.' }
+						$keep = $users[$idx].pass
+						if ($pw) {
+							if ($pw.Length -lt 8) { throw '비밀번호는 8자 이상으로 정해 주세요.' }
+							$keep = New-PassHash $pw
+						}
+						if (-not $unm) { $unm = $uid }
+						$users[$idx] = [ordered]@{ id = $uid; name = $unm; role = $role; pass = $keep; at = $users[$idx].at }
+					}
+					Save-Users $users
+					Send-Json $ctx ([ordered]@{ ok = $true })
+				}
+
+				'user-delete' {
+					$uid = [string]$body.id
+					if ($uid -ceq $me.id) { throw '지금 로그인한 계정은 지울 수 없습니다.' }
+					$left = New-Object System.Collections.ArrayList
+					$adminLeft = 0
+					foreach ($u in (Get-Users)) {
+						if ($u.id -ceq $uid) { continue }
+						[void]$left.Add($u)
+						if ($u.role -eq 'admin') { $adminLeft++ }
+					}
+					if ($adminLeft -lt 1) { throw '관리자 계정이 하나도 남지 않게 됩니다.' }
+					Save-Users @($left.ToArray())
+					# 그 사람이 들어와 있었다면 바로 내보낸다
+					foreach ($k in @($Sessions.Keys)) { if ($Sessions[$k] -ceq $uid) { $Sessions.Remove($k) } }
+					Send-Json $ctx ([ordered]@{ ok = $true })
+				}
+
+				'password' {
+					$old = [string]$body.old
+					$new = [string]$body.new
+					if (-not (Test-PassHash $old $me.pass)) { throw '지금 쓰는 비밀번호가 맞지 않습니다.' }
+					if ($new.Length -lt 8) { throw '새 비밀번호는 8자 이상으로 정해 주세요.' }
+					$users = @(Get-Users)
+					for ($i = 0; $i -lt $users.Count; $i++) {
+						if ($users[$i].id -ceq $me.id) {
+							$users[$i] = [ordered]@{ id = $users[$i].id; name = $users[$i].name; role = $users[$i].role; pass = (New-PassHash $new); at = $users[$i].at }
+						}
+					}
+					Save-Users $users
+					Send-Json $ctx ([ordered]@{ ok = $true })
 				}
 
 				# --- 파일 읽기/쓰기 ---

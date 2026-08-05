@@ -1,23 +1,18 @@
 ﻿<#
-  라성에너지(주) — 관리자 외부 공유
+  라성에너지(주) — 관리자 외부 접속 열기
   ---------------------------------------------------------------
   실행 : _admin\외부공유 실행.cmd
   하는 일
-    1) 관리자 서버를 비밀번호를 걸고 띄운다
-    2) 임시 인터넷 주소(터널)를 만든다
-    3) 주소 · 아이디 · 비밀번호를 화면에 띄운다
+    1) 관리자 서버를 켠다
+    2) 인터넷 주소(터널)를 만든다
+    3) 그 주소를 화면과 「접속주소.txt」에 적어 준다
 
-  이 창을 닫으면 주소가 사라진다. 내 PC가 켜져 있는 동안만 열린다.
+  아이디 · 비밀번호는 관리자 화면의 「접속 계정」에서 만든 것을 그대로 쓴다.
+  (이 창에서 따로 만들지 않는다)
 
-  옵션
-    -Password "직접정할비번"   비번을 직접 정한다 (안 주면 자동 생성)
-    -Editable                  상대방이 저장 · 배포까지 할 수 있게 한다
-                               (기본은 구경만 — 저장 · 배포 잠김)
+  이 창을 닫으면 주소가 닫힌다. 내 PC가 켜져 있는 동안만 열린다.
 #>
 param(
-	[string]$Password = '',
-	[string]$User = 'admin',
-	[switch]$Editable,
 	[int]$Port = 8881
 )
 
@@ -26,6 +21,25 @@ $ErrorActionPreference = 'Stop'
 
 $here = $PSScriptRoot
 $serverPs = Join-Path $here 'server.ps1'
+$usersFile = Join-Path $here 'data\users.json'
+
+# ---------- 계정 확인 ----------
+$hasUser = $false
+if (Test-Path -LiteralPath $usersFile) {
+	try {
+		$raw = ([System.IO.File]::ReadAllText($usersFile, [System.Text.Encoding]::UTF8)).Trim()
+		if ($raw) { $hasUser = (@(ConvertFrom-Json $raw).Count -gt 0) }
+	} catch {}
+}
+if (-not $hasUser) {
+	Write-Host ''
+	Write-Host '  아직 접속 계정이 없습니다.' -ForegroundColor Yellow
+	Write-Host '  먼저 「관리자 실행.cmd」 로 관리자를 열어 아이디와 비밀번호를 만들어 주세요.' -ForegroundColor White
+	Write-Host '  계정을 만든 뒤 이 창을 다시 실행하시면 됩니다.' -ForegroundColor Gray
+	Write-Host ''
+	Read-Host '  엔터를 누르면 닫힙니다'
+	exit 1
+}
 
 # ---------- cloudflared 찾기 ----------
 $cf = (Get-Command cloudflared -ErrorAction SilentlyContinue).Source
@@ -46,37 +60,35 @@ if (-not $cf) {
 	exit 1
 }
 
-# ---------- 비밀번호 ----------
-if (-not $Password) {
-	# 헷갈리는 글자(0/O, 1/l/I)는 빼고 만든다.
-	$chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789'.ToCharArray()
-	$rnd = New-Object System.Random
-	$Password = -join (1..12 | ForEach-Object { $chars[$rnd.Next(0, $chars.Length)] })
-}
-
 # ---------- 1. 관리자 서버 ----------
 Write-Host ''
 Write-Host '  관리자 서버를 켜는 중...' -ForegroundColor DarkGray
 
-$srvArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $serverPs, '-NoBrowser', '-Port', $Port, '-Password', $Password, '-User', $User)
-if (-not $Editable) { $srvArgs += '-ReadOnly' }
-$srv = Start-Process powershell -ArgumentList $srvArgs -WindowStyle Minimized -PassThru
+$srv = $null
+$alive = $false
+try {
+	$r = Invoke-WebRequest "http://localhost:$Port/api/ping" -UseBasicParsing -TimeoutSec 2
+	if ($r.StatusCode -eq 200) { $alive = $true }
+} catch {}
 
-$hdr = @{ Authorization = 'Basic ' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("${User}:${Password}")) }
-$ready = $false
-foreach ($i in 1..30) {
-	Start-Sleep -Milliseconds 500
-	try {
-		$r = Invoke-WebRequest "http://localhost:$Port/api/ping" -UseBasicParsing -TimeoutSec 3 -Headers $hdr
-		if ($r.StatusCode -eq 200) { $ready = $true; break }
-	} catch {}
+if ($alive) {
+	Write-Host '  이미 켜져 있는 관리자를 그대로 씁니다.' -ForegroundColor DarkGreen
+} else {
+	$srv = Start-Process powershell -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $serverPs, '-NoBrowser', '-Port', $Port) -WindowStyle Minimized -PassThru
+	foreach ($i in 1..30) {
+		Start-Sleep -Milliseconds 500
+		try {
+			$r = Invoke-WebRequest "http://localhost:$Port/api/ping" -UseBasicParsing -TimeoutSec 3
+			if ($r.StatusCode -eq 200) { $alive = $true; break }
+		} catch {}
+	}
+	if (-not $alive) {
+		Write-Host '  [오류] 관리자 서버가 응답하지 않습니다.' -ForegroundColor Red
+		Read-Host '  엔터를 누르면 닫힙니다'
+		exit 1
+	}
+	Write-Host '  관리자 서버 준비 완료' -ForegroundColor DarkGreen
 }
-if (-not $ready) {
-	Write-Host '  [오류] 관리자 서버가 응답하지 않습니다.' -ForegroundColor Red
-	Read-Host '  엔터를 누르면 닫힙니다'
-	exit 1
-}
-Write-Host '  관리자 서버 준비 완료' -ForegroundColor DarkGreen
 
 # ---------- 2. 터널 ----------
 Write-Host '  인터넷 주소를 만드는 중... (20~40초 걸립니다)' -ForegroundColor DarkGray
@@ -101,7 +113,7 @@ if (-not $publicUrl) {
 	Write-Host ''
 	Write-Host '  [오류] 인터넷 주소를 만들지 못했습니다.' -ForegroundColor Red
 	Write-Host "  기록 : $logFile" -ForegroundColor DarkGray
-	try { $srv.Kill() } catch {}
+	if ($srv) { try { $srv.Kill() } catch {} }
 	try { $tun.Kill() } catch {}
 	Read-Host '  엔터를 누르면 닫힙니다'
 	exit 1
@@ -129,42 +141,34 @@ if ($live) {
 }
 
 # ---------- 3. 안내 ----------
-$mode = '구경만 가능 (저장 · 배포 잠김)'
-if ($Editable) { $mode = '수정 · 배포까지 가능' }
-
 Write-Host ''
 Write-Host '  ================================================================'
-Write-Host '   라성에너지(주) 관리자 - 외부 공유 주소' -ForegroundColor Cyan
+Write-Host '   라성에너지(주) 홈페이지 관리자 - 접속 주소' -ForegroundColor Cyan
 Write-Host '  ================================================================'
 Write-Host ''
-Write-Host '   주소       ' -NoNewline -ForegroundColor Gray
+Write-Host '   주소   ' -NoNewline -ForegroundColor Gray
 Write-Host $adminUrl -ForegroundColor White
-Write-Host '   아이디     ' -NoNewline -ForegroundColor Gray
-Write-Host $User -ForegroundColor Yellow
-Write-Host '   비밀번호   ' -NoNewline -ForegroundColor Gray
-Write-Host $Password -ForegroundColor Yellow
-Write-Host '   권한       ' -NoNewline -ForegroundColor Gray
-Write-Host $mode -ForegroundColor Gray
+Write-Host ''
+Write-Host '   아이디와 비밀번호는 「접속 계정」에서 만든 것을 알려주시면 됩니다.' -ForegroundColor DarkGray
 Write-Host ''
 Write-Host '  ----------------------------------------------------------------'
-Write-Host '   ※ 이 창을 닫으면 주소가 사라집니다.' -ForegroundColor DarkYellow
+Write-Host '   ※ 이 창을 닫으면 주소가 닫힙니다.' -ForegroundColor DarkYellow
 Write-Host '   ※ 내 PC가 켜져 있는 동안만 열립니다.' -ForegroundColor DarkYellow
 Write-Host '   ※ 주소는 실행할 때마다 새로 바뀝니다.' -ForegroundColor DarkYellow
 Write-Host '  ----------------------------------------------------------------'
 Write-Host ''
 
 # 전달하기 쉽게 메모장에도 남긴다.
-$noteFile = Join-Path $here '공유주소.txt'
+$noteFile = Join-Path $here '접속주소.txt'
 @(
 	'라성에너지(주) 홈페이지 관리자',
 	'',
-	"주소      $adminUrl",
-	"아이디    $User",
-	"비밀번호  $Password",
-	"권한      $mode",
+	"주소   $adminUrl",
 	'',
-	'* 이 주소는 담당자 PC가 켜져 있는 동안만 열립니다.',
-	'* 창을 닫으면 주소가 사라집니다.'
+	'아이디 · 비밀번호는 담당자에게 받으세요.',
+	'',
+	'* 담당자 PC가 켜져 있는 동안 접속할 수 있습니다.',
+	'* 주소는 열 때마다 새로 바뀝니다.'
 ) -join "`r`n" | Out-File -LiteralPath $noteFile -Encoding utf8
 Write-Host "   메모 : $noteFile" -ForegroundColor DarkGray
 Write-Host ''
@@ -174,11 +178,14 @@ Write-Host ''
 
 # ---------- 종료까지 대기 ----------
 try {
-	while (-not $srv.HasExited -and -not $tun.HasExited) { Start-Sleep -Seconds 2 }
+	while (-not $tun.HasExited) {
+		if ($srv -and $srv.HasExited) { break }
+		Start-Sleep -Seconds 2
+	}
 } finally {
 	Write-Host ''
 	Write-Host '  주소를 닫는 중...' -ForegroundColor DarkGray
-	try { $srv.Kill() } catch {}
+	if ($srv) { try { $srv.Kill() } catch {} }
 	try { $tun.Kill() } catch {}
 	try { Remove-Item -LiteralPath $noteFile -Force -ErrorAction SilentlyContinue } catch {}
 	Write-Host '  닫혔습니다. 이제 외부에서 접속할 수 없습니다.' -ForegroundColor DarkGreen

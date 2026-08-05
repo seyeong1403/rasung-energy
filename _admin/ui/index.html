@@ -24,11 +24,13 @@
 			<button type="button" data-view="media"><span class="ic">▣</span>사진 관리</button>
 			<button type="button" data-view="inquiry"><span class="ic">✉</span>문의 접수<em class="badge" id="inqBadge" hidden>0</em></button>
 			<button type="button" data-view="board"><span class="ic">▤</span>공지 · 자료실</button>
+			<button type="button" data-view="account"><span class="ic">☺</span>접속 계정</button>
 			<button type="button" data-view="deploy"><span class="ic">↑</span>배포 · 백업</button>
 		</nav>
 		<div class="side-foot">
+			<p class="side-me" id="sideMe" hidden><b></b><span></span></p>
 			<a href="/" target="_blank" rel="noopener" class="side-link">사이트 새 창으로 열기</a>
-			<p class="side-note">이 관리자는 내 PC에서만 동작합니다.</p>
+			<a href="/logout" class="side-link out">로그아웃</a>
 		</div>
 	</aside>
 
@@ -186,6 +188,30 @@
 			<div class="board-layout">
 				<div class="post-list" id="postList"></div>
 				<div class="post-edit" id="postEdit"><p class="empty-msg">글을 선택하거나 <b>새 글 쓰기</b>를 누르세요.</p></div>
+			</div>
+		</section>
+
+		<!-- ---------- 접속 계정 ---------- -->
+		<section class="view" data-view="account" hidden>
+			<header class="view-head">
+				<h1>접속 계정</h1>
+				<p class="view-desc">이 관리자에 들어올 수 있는 사람을 관리합니다. 아이디와 비밀번호를 알려주면 다른 PC에서도 접속할 수 있습니다.</p>
+			</header>
+
+			<div class="panel">
+				<h2 class="panel-tit">내 비밀번호 바꾸기</h2>
+				<div class="co-form" style="max-width:420px">
+					<div class="form-row2"><label>지금 쓰는 비밀번호</label><input type="password" id="pwOld"></div>
+					<div class="form-row2"><label>새 비밀번호 <span class="hint">8자 이상</span></label><input type="password" id="pwNew"></div>
+					<button type="button" class="btn primary" id="pwSave">비밀번호 바꾸기</button>
+				</div>
+			</div>
+
+			<div class="panel" id="userPanel">
+				<h2 class="panel-tit">계정 목록</h2>
+				<p class="panel-desc"><b>수정 가능</b>은 모든 기능을 쓸 수 있습니다. <b>보기 전용</b>은 내용을 볼 수만 있고 저장·되돌리기가 잠깁니다.</p>
+				<div class="user-list" id="userList"></div>
+				<button type="button" class="btn primary" id="userAdd" style="margin-top:14px">계정 추가</button>
 			</div>
 		</section>
 

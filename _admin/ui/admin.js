@@ -33,16 +33,24 @@ if (location.protocol === 'file:') {
 const $ = (s, p) => (p || document).querySelector(s);
 const $$ = (s, p) => Array.prototype.slice.call((p || document).querySelectorAll(s));
 
+/* 이 계정이 저장까지 할 수 있는지 (시작할 때 서버에 물어본다) */
+let CAN_EDIT = true;
+
 async function api(route, body) {
 	const opt = body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {};
+	opt.credentials = 'same-origin';
 	let res;
 	try {
 		res = await fetch('/api/' + route, opt);
 	} catch (e) {
-		throw new Error('관리자 서버가 꺼져 있습니다. _admin 폴더의 「관리자 실행.cmd」를 실행한 뒤 새로고침해 주세요.');
+		throw new Error('서버와 연결하지 못했습니다. 잠시 뒤 새로고침해 주세요.');
 	}
 	let json;
 	try { json = await res.json(); } catch (e) { throw new Error('서버 응답을 읽을 수 없습니다.'); }
+	if (json.needLogin) {
+		location.href = '/admin/';
+		throw new Error('로그인이 필요합니다.');
+	}
 	if (!json.ok) throw new Error(json.error || '알 수 없는 오류');
 	return json;
 }
@@ -1047,7 +1055,101 @@ $('#gitPush').addEventListener('click', async () => {
 	} catch (e) { fail(e); } finally { busy(false); }
 });
 
+/* ============================================================
+   7. 접속 계정
+   ============================================================ */
+const ROLE_NAME = { admin: '수정 가능', viewer: '보기 전용' };
+
+views.account = async function () {
+	try {
+		const r = await api('users');
+		$('#userPanel').hidden = !r.canEdit;
+		$('#userList').innerHTML = r.items.map(u => `
+			<div class="user-row">
+				<span class="uid">${esc(u.id)}${u.me ? '<em>나</em>' : ''}</span>
+				<span class="unm">${esc(u.name)}</span>
+				<span class="urole ${u.role}">${ROLE_NAME[u.role] || u.role}</span>
+				<span class="uat">${esc(u.at || '')}</span>
+				<span class="ubtn">
+					<button type="button" class="btn ghost sm" data-edit="${esc(u.id)}">고치기</button>
+					${u.me ? '' : `<button type="button" class="btn danger sm" data-del="${esc(u.id)}">삭제</button>`}
+				</span>
+			</div>`).join('') || '<p class="empty-msg">계정이 없습니다.</p>';
+
+		$$('#userList [data-edit]').forEach(b => b.onclick = () => {
+			userForm(r.items.find(x => x.id === b.dataset.edit));
+		});
+		$$('#userList [data-del]').forEach(b => b.onclick = async () => {
+			if (!(await confirmBox('계정 삭제', `<b>${esc(b.dataset.del)}</b> 계정을 지웁니다. 이 아이디로는 더 이상 들어올 수 없습니다.`, '삭제'))) return;
+			busy(true, '지우는 중…');
+			try { await api('user-delete', { id: b.dataset.del }); toast('지웠습니다.'); views.account(); }
+			catch (e) { fail(e); } finally { busy(false); }
+		});
+	} catch (e) { fail(e); }
+};
+
+function userForm(u) {
+	const isNew = !u;
+	$('#modalBox').innerHTML = `<h3>${isNew ? '계정 추가' : '계정 고치기'}</h3>
+		<div class="form-row2"><label>아이디 <span class="hint">영문·숫자 3~20자</span></label>
+			<input type="text" id="u_id" value="${esc(isNew ? '' : u.id)}" ${isNew ? '' : 'readonly'}></div>
+		<div class="form-row2"><label>이름</label><input type="text" id="u_name" value="${esc(isNew ? '' : u.name)}" placeholder="예) 홍길동"></div>
+		<div class="form-row2"><label>권한</label>
+			<select id="u_role">
+				<option value="admin"${(!isNew && u.role === 'admin') ? ' selected' : ''}>수정 가능 — 모든 기능</option>
+				<option value="viewer"${(!isNew && u.role === 'viewer') ? ' selected' : ''}>보기 전용 — 저장·되돌리기 잠김</option>
+			</select></div>
+		<div class="form-row2"><label>비밀번호 <span class="hint">${isNew ? '8자 이상' : '바꿀 때만 입력'}</span></label>
+			<input type="password" id="u_pass" autocomplete="new-password"></div>
+		<div class="modal-btns"><button type="button" class="btn ghost" data-c="1">취소</button>
+			<button type="button" class="btn primary" id="u_ok">저장</button></div>`;
+	$('#modal').hidden = false;
+	$('#modalBox').querySelector('[data-c]').onclick = () => { $('#modal').hidden = true; };
+	$('#u_ok').onclick = async () => {
+		busy(true, '저장하는 중…');
+		try {
+			await api('user-save', {
+				id: $('#u_id').value.trim(), name: $('#u_name').value.trim(),
+				role: $('#u_role').value, pass: $('#u_pass').value
+			});
+			$('#modal').hidden = true;
+			toast('저장했습니다.');
+			views.account();
+		} catch (e) { fail(e); } finally { busy(false); }
+	};
+}
+
+$('#userAdd').addEventListener('click', () => userForm(null));
+
+$('#pwSave').addEventListener('click', async () => {
+	const o = $('#pwOld').value, n = $('#pwNew').value;
+	if (!o || !n) return toast('비밀번호를 입력해 주세요.', true);
+	busy(true, '바꾸는 중…');
+	try {
+		await api('password', { old: o, new: n });
+		$('#pwOld').value = ''; $('#pwNew').value = '';
+		toast('비밀번호를 바꿨습니다. 다음 로그인부터 적용됩니다.');
+	} catch (e) { fail(e); } finally { busy(false); }
+});
+
 /* -------------------------------------------------- 시작 */
-go((location.hash || '#dash').slice(1));
+(async () => {
+	try {
+		const m = await api('me');
+		CAN_EDIT = !!m.canEdit;
+		const el = $('#sideMe');
+		el.hidden = false;
+		$('b', el).textContent = m.name || m.id;
+		$('span', el).textContent = ROLE_NAME[m.role] || '';
+		if (!CAN_EDIT) {
+			document.body.classList.add('readonly');
+			['#edSave', '#coSave', '#postNew', '#boardPublish', '#inqAdd', '#gitPush'].forEach(s => {
+				const b = $(s);
+				if (b) { b.disabled = true; b.title = '보기 전용 계정입니다.'; }
+			});
+		}
+	} catch (e) { /* 로그인 화면으로 넘어간다 */ }
+	go((location.hash || '#dash').slice(1));
+})();
 
 })();
