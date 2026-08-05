@@ -63,13 +63,14 @@
 
     // ---- 문의/AS 폼: 접수 ----
     // data-endpoint 가 비어 있으면 예전처럼 시안 안내만 띄운다.
-    // /api/ 로 시작하는 주소는 내 PC(관리자 실행 중)에서 열었을 때만 쓴다.
-    // 그래야 인터넷에 올려도 방문자에게 영향이 없다.
+    // 주소가 들어 있으면 그리로 보낸다. 접수 서버가 없는 곳(정적 호스팅)에서는
+    // 요청이 실패하므로, 그때는 다시 시안 안내로 돌아간다.
     function liveEndpoint(form) {
       var ep = form.getAttribute('data-endpoint') || '';
       if (!ep) return '';
-      var local = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
-      if (ep.charAt(0) === '/' && !local) return '';
+      // /api/ 로 시작하는 주소는 담당자 PC에서 띄운 관리자 전용이다.
+      if (ep.charAt(0) === '/' &&
+          location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') return '';
       return ep;
     }
 
@@ -88,12 +89,13 @@
             if (f.type === 'checkbox') f.checked = false; else f.value = '';
           });
         }
-
-        if (!ep) {
+        function demoOk() {                       // 접수 서버가 없는 경우
+          if (note) note.hidden = false;
           toast('문의가 정상 접수되었습니다. (리디자인 시안)');
           clear();
-          return;
         }
+
+        if (!ep) { demoOk(); return; }
 
         var data = { kind: form.getAttribute('data-kind') || '문의', page: location.pathname.split('/').pop() };
         form.querySelectorAll('[name]').forEach(function (f) { data[f.name] = f.value.trim(); });
@@ -104,11 +106,16 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(data)
-        }).then(function (r) { return r.json(); }).then(function (j) {
+        }).then(function (r) {
+          if (r.status === 404 || r.status === 403) { var e404 = new Error('no-endpoint'); e404.noEndpoint = true; throw e404; }
+          return r.json();
+        }).then(function (j) {
           if (!j.ok) throw new Error(j.error || '접수 실패');
           toast('문의가 접수되었습니다. 빠른 시일 내에 연락드리겠습니다.');
           clear();
-        }).catch(function () {
+        }).catch(function (err) {
+          // 접수 서버가 없는 자리(검토용 정적 주소 등)에서는 예전처럼 시안 안내
+          if (err && (err.noEndpoint || err instanceof TypeError)) { demoOk(); return; }
           toast('접수 중 문제가 생겼습니다. 전화(054-853-5696)로 문의해 주세요.');
         }).then(function () {
           if (btn) { btn.disabled = false; }

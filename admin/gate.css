@@ -1,0 +1,26 @@
+@charset "utf-8";
+/* 로그인 · 계정 만들기 화면 */
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+	min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;
+	background:#0C2233;
+	font-family:"Pretendard","Noto Sans KR","Malgun Gothic",system-ui,sans-serif;
+	font-size:16px;line-height:1.7;word-break:keep-all;color:#16202A;
+}
+.box{width:100%;max-width:390px;background:#fff;border-radius:14px;padding:40px 34px;
+	box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.box.wide{max-width:460px}
+h1{font-size:20px;font-weight:700;color:#0C2233;letter-spacing:-.02em;line-height:1.4}
+h1 span{display:block;font-size:14px;font-weight:500;color:#0087BC;margin-top:2px}
+.sub{margin:14px 0 26px;font-size:14px;color:#57606B}
+label{display:block;font-size:14px;font-weight:700;color:#334155;margin:0 0 7px}
+label em{font-style:normal;font-weight:500;color:#8A929B;font-size:13px;margin-left:6px}
+input{width:100%;padding:12px 14px;font-size:16px;border:1px solid #CFD6DD;border-radius:8px;
+	margin-bottom:18px;font-family:inherit;color:inherit}
+input:focus{outline:none;border-color:#0087BC;box-shadow:0 0 0 3px rgba(0,135,188,.16)}
+button{width:100%;padding:13px;font-size:16px;font-weight:700;color:#fff;background:#0087BC;
+	border:0;border-radius:8px;cursor:pointer;font-family:inherit;transition:background .15s}
+button:hover{background:#0076A4}
+.err{margin:0 0 18px;padding:11px 14px;background:#FEF3F2;border:1px solid #FDA29B;
+	border-radius:8px;color:#B42318;font-size:14px}
+.foot{margin:24px 0 0;font-size:13px;color:#98A2B3;text-align:center;line-height:1.6}

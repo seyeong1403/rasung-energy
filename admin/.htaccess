@@ -1,0 +1,24 @@
+# 관리자 자료 보호
+<IfModule mod_authz_core.c>
+	Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+	Order allow,deny
+	Deny from all
+</IfModule>
+
+# 관리자 화면과 API 만 열어 준다
+<FilesMatch "^(index\.php|login\.php|logout\.php|setup\.php|api\.php|admin\.css|admin\.js|gate\.css)$">
+	<IfModule mod_authz_core.c>
+		Require all granted
+	</IfModule>
+	<IfModule !mod_authz_core.c>
+		Order allow,deny
+		Allow from all
+	</IfModule>
+</FilesMatch>
+
+# 검색엔진 차단
+<IfModule mod_headers.c>
+	Header set X-Robots-Tag "noindex, nofollow"
+</IfModule>

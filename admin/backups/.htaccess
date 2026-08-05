@@ -1,0 +1,8 @@
+# 계정 · 문의 내용 · 게시글 데이터 — 웹으로는 절대 열리지 않는다
+<IfModule mod_authz_core.c>
+	Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+	Order allow,deny
+	Deny from all
+</IfModule>

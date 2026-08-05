@@ -2,7 +2,12 @@ Thumbs.db
 .DS_Store
 desktop.ini
 
-# 관리자 — 개인정보 · 백업은 올리지 않는다
+# 관리자 — 개인정보 · 계정 · 백업은 올리지 않는다
+admin/data/users.php
+admin/data/inquiries.php
+admin/data/lockout.php
+admin/backups/*
+!admin/backups/.htaccess
 _admin/data/inquiries.json
 _admin/backups/
 _admin/공유주소.txt
