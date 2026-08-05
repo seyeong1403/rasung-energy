@@ -23,6 +23,18 @@ $here = $PSScriptRoot
 $serverPs = Join-Path $here 'server.ps1'
 $usersFile = Join-Path $here 'data\users.json'
 
+# 이 창이 열려 있는 동안 PC가 절전으로 들어가지 않게 한다.
+# (절전에 들어가면 상대방 접속이 끊긴다. 화면은 꺼져도 된다)
+try {
+	Add-Type -Namespace Win32 -Name Power -MemberDefinition @'
+[DllImport("kernel32.dll", SetLastError = true)]
+public static extern uint SetThreadExecutionState(uint esFlags);
+'@ -ErrorAction Stop
+	# ES_CONTINUOUS | ES_SYSTEM_REQUIRED
+	[void][Win32.Power]::SetThreadExecutionState(0x80000001)
+	$sleepBlocked = $true
+} catch { $sleepBlocked = $false }
+
 # ---------- 계정 확인 ----------
 $hasUser = $false
 if (Test-Path -LiteralPath $usersFile) {
@@ -152,9 +164,12 @@ Write-Host ''
 Write-Host '   아이디와 비밀번호는 「접속 계정」에서 만든 것을 알려주시면 됩니다.' -ForegroundColor DarkGray
 Write-Host ''
 Write-Host '  ----------------------------------------------------------------'
-Write-Host '   ※ 이 창을 닫으면 주소가 닫힙니다.' -ForegroundColor DarkYellow
-Write-Host '   ※ 내 PC가 켜져 있는 동안만 열립니다.' -ForegroundColor DarkYellow
-Write-Host '   ※ 주소는 실행할 때마다 새로 바뀝니다.' -ForegroundColor DarkYellow
+Write-Host '   ※ 이 창을 닫으면 접속이 끊깁니다. 열어 두세요.' -ForegroundColor DarkYellow
+if ($sleepBlocked) {
+	Write-Host '   ※ 이 창이 열려 있는 동안 PC는 절전으로 들어가지 않습니다.' -ForegroundColor DarkGreen
+} else {
+	Write-Host '   ※ PC가 절전으로 들어가면 접속이 끊깁니다. 절전을 꺼 두세요.' -ForegroundColor DarkYellow
+}
 Write-Host '  ----------------------------------------------------------------'
 Write-Host ''
 
@@ -184,10 +199,13 @@ try {
 	}
 } finally {
 	Write-Host ''
-	Write-Host '  주소를 닫는 중...' -ForegroundColor DarkGray
+	Write-Host '  접속을 닫는 중...' -ForegroundColor DarkGray
 	if ($srv) { try { $srv.Kill() } catch {} }
 	try { $tun.Kill() } catch {}
 	try { Remove-Item -LiteralPath $noteFile -Force -ErrorAction SilentlyContinue } catch {}
+	# 안내 페이지를 "닫힘" 으로 바꿔 둔다. (상대방이 헛걸음하지 않도록)
+	# 절전 방지 해제
+	try { [void][Win32.Power]::SetThreadExecutionState(0x80000000) } catch {}
 	Write-Host '  닫혔습니다. 이제 외부에서 접속할 수 없습니다.' -ForegroundColor DarkGreen
 	Write-Host ''
 }
