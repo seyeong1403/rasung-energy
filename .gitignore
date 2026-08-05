@@ -1,3 +1,8 @@
 Thumbs.db
 .DS_Store
 desktop.ini
+
+# 관리자 — 개인정보 · 백업은 올리지 않는다
+_admin/data/inquiries.json
+_admin/backups/
+_admin/공유주소.txt

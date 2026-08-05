@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>라성에너지(주) 홈페이지 관리자</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<link rel="stylesheet" href="admin.css">
+</head>
+<body>
+
+<div id="app">
+
+	<!-- ============ 사이드바 ============ -->
+	<aside id="side">
+		<div class="side-head">
+			<p class="brand">라성에너지<span>(주)</span></p>
+			<p class="brand-sub">홈페이지 관리자</p>
+		</div>
+		<nav class="side-nav">
+			<button type="button" data-view="dash" class="on"><span class="ic">■</span>대시보드</button>
+			<button type="button" data-view="content"><span class="ic">✎</span>내용 수정</button>
+			<button type="button" data-view="company"><span class="ic">☎</span>회사 정보</button>
+			<button type="button" data-view="media"><span class="ic">▣</span>사진 관리</button>
+			<button type="button" data-view="inquiry"><span class="ic">✉</span>문의 접수<em class="badge" id="inqBadge" hidden>0</em></button>
+			<button type="button" data-view="board"><span class="ic">▤</span>공지 · 자료실</button>
+			<button type="button" data-view="deploy"><span class="ic">↑</span>배포 · 백업</button>
+		</nav>
+		<div class="side-foot">
+			<a href="/" target="_blank" rel="noopener" class="side-link">사이트 새 창으로 열기</a>
+			<p class="side-note">이 관리자는 내 PC에서만 동작합니다.</p>
+		</div>
+	</aside>
+
+	<!-- ============ 본문 ============ -->
+	<main id="main">
+
+		<!-- ---------- 대시보드 ---------- -->
+		<section class="view" data-view="dash">
+			<header class="view-head">
+				<h1>대시보드</h1>
+				<p class="view-desc">홈페이지 현황을 한눈에 확인합니다.</p>
+			</header>
+			<div class="stat-row" id="dashStats"></div>
+			<div class="panel">
+				<h2 class="panel-tit">바로 하기</h2>
+				<div class="quick-row">
+					<button type="button" class="quick" data-go="content"><b>글 고치기</b><span>각 페이지의 문구를 수정합니다</span></button>
+					<button type="button" class="quick" data-go="company"><b>회사 정보 바꾸기</b><span>전화·주소를 모든 페이지에서 한 번에 바꿉니다</span></button>
+					<button type="button" class="quick" data-go="board"><b>공지 올리기</b><span>공지사항·자료실에 글을 등록합니다</span></button>
+					<button type="button" class="quick" data-go="deploy"><b>사이트 반영</b><span>수정한 내용을 실제 사이트에 올립니다</span></button>
+				</div>
+			</div>
+			<div class="panel">
+				<h2 class="panel-tit">최근 문의</h2>
+				<div id="dashInq" class="dash-inq"></div>
+			</div>
+			<div class="panel warn-panel">
+				<h2 class="panel-tit">알아두실 점</h2>
+				<ul class="check-list" id="dashCheck"></ul>
+			</div>
+		</section>
+
+		<!-- ---------- 내용 수정 ---------- -->
+		<section class="view" data-view="content" hidden>
+			<header class="view-head">
+				<h1>내용 수정</h1>
+				<p class="view-desc">페이지를 고르고 왼쪽 문구를 고친 뒤 <b>저장하기</b>를 누르면 사이트에 바로 반영됩니다. 상단 메뉴·푸터처럼 모든 페이지에 같이 들어가는 부분은 <b>회사 정보</b>에서 한 번에 바꿉니다.</p>
+			</header>
+
+			<div class="edit-layout">
+				<div class="edit-side">
+					<div class="page-picker" id="pagePicker"></div>
+				</div>
+
+				<div class="edit-body">
+					<div class="edit-bar">
+						<div class="edit-bar-l">
+							<strong id="edTitle">페이지를 선택하세요</strong>
+							<span id="edPath" class="edit-path"></span>
+						</div>
+						<div class="edit-bar-r">
+							<span id="edDirty" class="dirty-tag" hidden>수정됨</span>
+							<button type="button" id="edReload" class="btn ghost">되돌리기</button>
+							<button type="button" id="edSave" class="btn primary" disabled>저장하기</button>
+						</div>
+					</div>
+
+					<div class="edit-split">
+						<div class="edit-fields" id="edFields">
+							<p class="empty-msg">왼쪽 목록에서 수정할 페이지를 선택해 주세요.</p>
+						</div>
+						<div class="edit-preview">
+							<div class="prev-bar">
+								<span>미리보기</span>
+								<div class="prev-btns">
+									<button type="button" data-w="1440" class="on">PC</button>
+									<button type="button" data-w="768">태블릿</button>
+									<button type="button" data-w="390">모바일</button>
+								</div>
+							</div>
+							<div class="prev-stage"><iframe id="edPrev" title="미리보기"></iframe></div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</section>
+
+		<!-- ---------- 회사 정보 ---------- -->
+		<section class="view" data-view="company" hidden>
+			<header class="view-head">
+				<h1>회사 정보</h1>
+				<p class="view-desc">전화번호·주소처럼 <b>모든 페이지에 함께 들어가는 정보</b>입니다. 여기서 한 번 고치면 17개 페이지 전부에 반영됩니다.</p>
+			</header>
+			<div class="panel">
+				<div class="co-form" id="coForm"><p class="empty-msg">불러오는 중…</p></div>
+				<div class="modal-btns" style="justify-content:flex-start">
+					<button type="button" class="btn primary" id="coSave" disabled>전체 페이지에 반영</button>
+					<button type="button" class="btn ghost" id="coReload">되돌리기</button>
+				</div>
+			</div>
+		</section>
+
+		<!-- ---------- 사진 관리 ---------- -->
+		<section class="view" data-view="media" hidden>
+			<header class="view-head">
+				<h1>사진 관리</h1>
+				<p class="view-desc">사진 위에 새 파일을 <b>끌어다 놓거나 클릭</b>하면 같은 자리의 사진이 교체됩니다. 원본은 자동으로 백업됩니다.</p>
+			</header>
+			<div class="filter-bar">
+				<label class="sel-wrap">폴더
+					<select id="mediaFolder"><option value="">전체</option></select>
+				</label>
+				<span class="hint" id="mediaCount"></span>
+			</div>
+			<div id="imgGrid" class="img-grid"><p class="empty-msg">불러오는 중…</p></div>
+		</section>
+
+		<!-- ---------- 문의 ---------- -->
+		<section class="view" data-view="inquiry" hidden>
+			<header class="view-head">
+				<h1>문의 접수</h1>
+				<p class="view-desc">온라인문의·A/S문의로 들어온 내용과, 전화·메일로 받은 문의를 함께 관리합니다.</p>
+			</header>
+
+			<div class="panel notice-panel" id="inqEndpoint"></div>
+
+			<div class="filter-bar">
+				<div class="chip-row" id="inqFilter">
+					<button type="button" data-st="" class="on">전체</button>
+					<button type="button" data-st="new">신규</button>
+					<button type="button" data-st="doing">확인중</button>
+					<button type="button" data-st="done">답변완료</button>
+					<button type="button" data-st="hold">보류</button>
+				</div>
+				<div class="filter-right">
+					<button type="button" id="inqAdd" class="btn ghost">직접 등록</button>
+					<button type="button" id="inqCsv" class="btn ghost">엑셀(CSV) 내려받기</button>
+				</div>
+			</div>
+
+			<div class="inq-layout">
+				<div class="inq-list" id="inqList"></div>
+				<div class="inq-detail" id="inqDetail"><p class="empty-msg">왼쪽에서 문의를 선택하세요.</p></div>
+			</div>
+		</section>
+
+		<!-- ---------- 게시판 ---------- -->
+		<section class="view" data-view="board" hidden>
+			<header class="view-head">
+				<h1>공지 · 자료실</h1>
+				<p class="view-desc">여기에 등록한 글은 홈페이지 <b>고객센터</b>의 공지사항·자료실에 그대로 올라갑니다.</p>
+			</header>
+
+			<div class="filter-bar">
+				<div class="chip-row" id="boardFilter">
+					<button type="button" data-b="notice" class="on">공지사항</button>
+					<button type="button" data-b="info">자료실</button>
+				</div>
+				<div class="filter-right">
+					<button type="button" id="postNew" class="btn primary">새 글 쓰기</button>
+					<button type="button" id="boardPublish" class="btn ghost">사이트에 다시 반영</button>
+				</div>
+			</div>
+
+			<div class="board-layout">
+				<div class="post-list" id="postList"></div>
+				<div class="post-edit" id="postEdit"><p class="empty-msg">글을 선택하거나 <b>새 글 쓰기</b>를 누르세요.</p></div>
+			</div>
+		</section>
+
+		<!-- ---------- 배포 ---------- -->
+		<section class="view" data-view="deploy" hidden>
+			<header class="view-head">
+				<h1>배포 · 백업</h1>
+				<p class="view-desc">수정한 내용을 인터넷 사이트에 올리고, 예전 상태로 되돌립니다.</p>
+			</header>
+
+			<div class="panel">
+				<h2 class="panel-tit">사이트에 올리기</h2>
+				<p class="panel-desc">GitHub 저장소(rasung-energy)로 올립니다. GitHub Pages를 켜 두셨다면 1~2분 뒤 인터넷 주소에 반영됩니다.</p>
+				<div class="deploy-row">
+					<input type="text" id="gitMsg" placeholder="무엇을 바꿨는지 적어주세요 (예: 공지사항 등록)">
+					<button type="button" id="gitPush" class="btn primary">사이트에 올리기</button>
+				</div>
+				<div class="log-box" id="gitLog" hidden></div>
+			</div>
+
+			<div class="panel">
+				<h2 class="panel-tit">변경 대기 중인 파일</h2>
+				<button type="button" id="gitStatus" class="btn ghost">확인하기</button>
+				<div class="log-box" id="statusLog" hidden></div>
+			</div>
+
+			<div class="panel">
+				<h2 class="panel-tit">자동 백업 (되돌리기)</h2>
+				<p class="panel-desc">저장할 때마다 원본이 자동 보관됩니다. 잘못 고쳤을 때 되돌릴 수 있습니다.</p>
+				<div id="backupList" class="backup-list"></div>
+			</div>
+		</section>
+
+	</main>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+<div id="modal" class="modal" hidden><div class="modal-box" id="modalBox"></div></div>
+<div id="busy" class="busy" hidden><div class="busy-box"><span class="spin"></span><p id="busyMsg">처리 중…</p></div></div>
+
+<script src="admin.js"></script>
+</body>
+</html>

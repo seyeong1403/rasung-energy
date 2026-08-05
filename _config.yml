@@ -1,0 +1,6 @@
+# GitHub Pages 설정
+# _admin(로컬 관리자)과 개발용 스크립트는 사이트로 내보내지 않는다.
+exclude:
+  - _admin
+  - serve.ps1
+  - README.md
